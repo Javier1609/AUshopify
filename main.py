@@ -8,14 +8,12 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 DB_PATH = "configuraciones.db"
 
-# CREAR BASE DE DATOS: configuración y mensajes
+# Crear tablas
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS configuraciones (
         shop_domain TEXT PRIMARY KEY,
-        instance_id TEXT,
-        token TEXT,
         activa INTEGER DEFAULT 1
     )
 ''')
@@ -23,40 +21,37 @@ cursor.execute('''
     CREATE TABLE IF NOT EXISTS mensajes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         shop_domain TEXT,
+        pedido_id TEXT,
         telefono TEXT,
         mensaje TEXT,
+        estado TEXT DEFAULT 'pendiente',
         fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 ''')
 conn.commit()
 conn.close()
 
-
 @app.get("/", response_class=HTMLResponse)
 async def landing(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-
 @app.get("/configurar", response_class=HTMLResponse)
 async def mostrar_formulario(request: Request, shop: str = Query(None)):
     if not shop:
-        return HTMLResponse("❌ Debes acceder con ?shop=mitienda.myshopify.com", status_code=400)
+        return HTMLResponse("❌ Falta ?shop=mitienda.myshopify.com", status_code=400)
     return templates.TemplateResponse("configurar.html", {"request": request, "shop": shop})
-
 
 @app.post("/configurar", response_class=HTMLResponse)
 async def guardar_configuracion(
     request: Request,
-    shop: str = Form(...),
-    instance_id: str = Form(...),
-    token: str = Form(...)
+    shop: str = Form(...)
 ):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT OR REPLACE INTO configuraciones (shop_domain, instance_id, token, activa)
-        VALUES (?, ?, ?, 1)
-    """, (shop, instance_id, token))
+        INSERT OR REPLACE INTO configuraciones (shop_domain, activa)
+        VALUES (?, 1)
+    """, (shop,))
     conn.commit()
     conn.close()
     return templates.TemplateResponse("configurar.html", {
@@ -65,7 +60,6 @@ async def guardar_configuracion(
         "mensaje": "✅ Configuración guardada correctamente"
     })
 
-
 @app.get("/panel", response_class=HTMLResponse)
 async def ver_panel(request: Request, shop: str = Query(None)):
     if not shop:
@@ -73,26 +67,28 @@ async def ver_panel(request: Request, shop: str = Query(None)):
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT instance_id, token, activa FROM configuraciones WHERE shop_domain = ?", (shop,))
+    cursor.execute("SELECT activa FROM configuraciones WHERE shop_domain = ?", (shop,))
     resultado = cursor.fetchone()
 
-    cursor.execute("SELECT telefono, mensaje, fecha FROM mensajes WHERE shop_domain = ? ORDER BY fecha DESC", (shop,))
+    cursor.execute("""
+        SELECT pedido_id, telefono, mensaje, estado, fecha
+        FROM mensajes
+        WHERE shop_domain = ?
+        ORDER BY fecha DESC
+    """, (shop,))
     mensajes = cursor.fetchall()
     conn.close()
 
     if not resultado:
         return HTMLResponse(f"❌ No hay configuración guardada para {shop}", status_code=404)
 
-    instance_id, token, activa = resultado
+    activa = resultado[0]
     return templates.TemplateResponse("panel.html", {
         "request": request,
         "shop": shop,
-        "instance_id": instance_id,
-        "token": token,
         "activa": activa,
         "mensajes": mensajes
     })
-
 
 @app.get("/activar")
 async def activar_shop(shop: str = Query(...), estado: int = Query(...)):
@@ -103,7 +99,6 @@ async def activar_shop(shop: str = Query(...), estado: int = Query(...)):
     conn.close()
     return RedirectResponse(url=f"/panel?shop={shop}", status_code=303)
 
-
 @app.post("/webhook")
 async def recibir_pedido(pedido: dict):
     shop_domain = pedido.get("source_name")
@@ -112,28 +107,24 @@ async def recibir_pedido(pedido: dict):
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT instance_id, token, activa FROM configuraciones WHERE shop_domain = ?", (shop_domain,))
+    cursor.execute("SELECT activa FROM configuraciones WHERE shop_domain = ?", (shop_domain,))
     resultado = cursor.fetchone()
 
-    if not resultado:
-        return {"error": f"No hay configuración guardada para {shop_domain}"}
-
-    instance_id, token, activa = resultado
-
-    if activa == 0:
-        return {"error": "Tienda inactiva. WhatsApp no enviado."}
+    if not resultado or resultado[0] == 0:
+        return {"error": "Tienda inactiva o no registrada"}
 
     telefono = pedido.get("shipping_address", {}).get("phone")
     nombre = pedido.get("shipping_address", {}).get("name")
     direccion = pedido.get("shipping_address", {}).get("address1")
     productos = "\n".join([f"• {item['title']} x{item['quantity']}" for item in pedido.get("line_items", [])])
+    pedido_id = str(pedido.get("id"))
 
     if not telefono:
         return {"error": "El pedido no tiene teléfono"}
 
     mensaje = f"""🛍️ ¡Hola {nombre}!
 
-Gracias por tu pedido #{pedido.get("id")} en nuestra tienda ❤️
+Gracias por tu pedido #{pedido_id} en nuestra tienda ❤️
 
 📦 Productos:
 {productos}
@@ -143,29 +134,30 @@ Gracias por tu pedido #{pedido.get("id")} en nuestra tienda ❤️
 
 Te avisaremos cuando tu pedido esté en camino. ¡Gracias por confiar en nosotros! 📬"""
 
-    url = f"https://api.ultramsg.com/{instance_id}/messages/chat"
+    # Enviar con Baileys (servidor local en puerto 3000)
+    url = "https://94eba1fc-8243-4ba5-aec6-4ac0c286ce4f-00-hmxo37a6xidr.spock.replit.dev/send"
     payload = {
-        "token": token,
         "to": telefono,
-        "body": mensaje
+        "message": mensaje
     }
 
+    estado_envio = "pendiente"
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(url, data=payload)
-
-            # GUARDAR MENSAJE EN HISTORIAL
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO mensajes (shop_domain, telefono, mensaje)
-                VALUES (?, ?, ?)
-            """, (shop_domain, telefono, mensaje))
-            conn.commit()
-            conn.close()
-
-            print("✅ WhatsApp enviado a:", telefono)
-            return {"status": "success", "whatsapp_response": response.json()}
+            response = await client.post(url, json=payload)
+            estado_envio = "enviado" if response.status_code == 200 else "fallido"
         except Exception as e:
-            print("❌ Error enviando WhatsApp:", str(e))
-            return {"error": str(e)}
+            print("❌ Error enviando a Baileys:", e)
+            estado_envio = "fallido"
+
+    # Guardar en historial
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO mensajes (shop_domain, pedido_id, telefono, mensaje, estado)
+        VALUES (?, ?, ?, ?, ?)
+    """, (shop_domain, pedido_id, telefono, mensaje, estado_envio))
+    conn.commit()
+    conn.close()
+
+    return {"status": estado_envio}
