@@ -31,10 +31,6 @@ cursor.execute('''
 conn.commit()
 conn.close()
 
-# ==========================================
-# ELIMINADA ruta "/" porque no hay index.html
-# ==========================================
-
 @app.get("/configurar", response_class=HTMLResponse)
 async def mostrar_formulario(request: Request, shop: str = Query(None)):
     if not shop:
@@ -113,7 +109,8 @@ async def recibir_pedido(pedido: dict):
     if not resultado or resultado[0] == 0:
         return {"error": "Tienda inactiva o no registrada"}
 
-    telefono = pedido.get("shipping_address", {}).get("phone")
+    telefono_raw = pedido.get("shipping_address", {}).get("phone", "")
+    telefono = ''.join(filter(str.isdigit, telefono_raw))  # Solo números
     nombre = pedido.get("shipping_address", {}).get("name")
     direccion = pedido.get("shipping_address", {}).get("address1")
     productos = "\n".join([f"• {item['title']} x{item['quantity']}" for item in pedido.get("line_items", [])])
@@ -134,7 +131,7 @@ Gracias por tu pedido #{pedido_id} en nuestra tienda ❤️
 
 Te avisaremos cuando tu pedido esté en camino. ¡Gracias por confiar en nosotros! 📬"""
 
-    # Enviar mensaje con Baileys en Replit
+    # Enviar con Baileys en Replit
     url = "https://94eba1fc-8243-4ba5-aec6-4ac0c286ce4f-00-hmxo37a6xidr.spock.replit.dev/send"
     payload = {
         "to": telefono,
@@ -150,7 +147,7 @@ Te avisaremos cuando tu pedido esté en camino. ¡Gracias por confiar en nosotro
             print("❌ Error enviando WhatsApp:", e)
             estado_envio = "fallido"
 
-    # Guardar el historial del mensaje
+    # Guardar en historial
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
