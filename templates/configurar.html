@@ -1,24 +1,28 @@
+<!-- templates/configurar.html -->
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Configurar tienda</title>
+  <meta charset="UTF-8">
+  <title>Configurar WhatsApp</title>
 </head>
 <body>
-    <h2>Configurar WhatsApp para {{ shop }}</h2>
+  <h1>Configuración para {{ shop }}</h1>
 
-    {% if mensaje %}
-        <p style="color: green;">{{ mensaje }}</p>
-    {% endif %}
+  {% if mensaje %}
+    <p style="color: green;">{{ mensaje }}</p>
+  {% endif %}
 
-    <form method="post">
-        <input type="hidden" name="shop" value="{{ shop }}">
-        <label>Instance ID:</label><br>
-        <input type="text" name="instance_id" required><br><br>
+  <form method="post">
+    <input type="hidden" name="shop" value="{{ shop }}">
+    <label>Instance ID (Replit):</label><br>
+    <input type="text" name="instance_id" placeholder="no necesario" disabled><br><br>
 
-        <label>Token:</label><br>
-        <input type="text" name="token" required><br><br>
+    <label>Token (no se usa con Baileys):</label><br>
+    <input type="text" name="token" placeholder="no necesario" disabled><br><br>
 
-        <button type="submit">Guardar configuración</button>
-    </form>
+    <button type="submit">Guardar configuración</button>
+  </form>
+
+  <p><a href="/panel?shop={{ shop }}">Ir al Panel</a></p>
 </body>
-</html>//// jajtea
+</html>

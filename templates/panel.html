@@ -1,14 +1,46 @@
+<!-- templates/panel.html -->
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Panel de la tienda {{ shop }}</title>
+  <meta charset="UTF-8">
+  <title>Panel de mensajes</title>
 </head>
 <body>
-    <h2>Panel de configuración para {{ shop }}</h2>
+  <h1>Panel de {{ shop }}</h1>
 
-    <p><strong>Instance ID:</strong> {{ instance_id }}</p>
-    <p><strong>Token:</strong> {{ token }}</p>
+  <p>Tienda {{ "activa ✅" if activa else "inactiva ❌" }}</p>
 
-    <a href="/configurar?shop={{ shop }}">Editar configuración</a>
+  <form action="/activar" method="get">
+    <input type="hidden" name="shop" value="{{ shop }}">
+    <button type="submit" name="estado" value="{{ 0 if activa else 1 }}">
+      {{ "Desactivar" if activa else "Activar" }}
+    </button>
+  </form>
+
+  <hr>
+
+  <h2>Historial de mensajes</h2>
+  {% if mensajes %}
+    <table border="1" cellpadding="5">
+      <tr>
+        <th>Pedido</th>
+        <th>Teléfono</th>
+        <th>Mensaje</th>
+        <th>Estado</th>
+        <th>Fecha</th>
+      </tr>
+      {% for m in mensajes %}
+      <tr>
+        <td>{{ m[0] }}</td>
+        <td>{{ m[1] }}</td>
+        <td><pre>{{ m[2] }}</pre></td>
+        <td>{{ m[3] }}</td>
+        <td>{{ m[4] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p>No hay mensajes aún.</p>
+  {% endif %}
 </body>
 </html>
