@@ -31,6 +31,7 @@ cursor.execute('''
 conn.commit()
 conn.close()
 
+# Página para configurar la tienda
 @app.get("/configurar", response_class=HTMLResponse)
 async def mostrar_formulario(request: Request, shop: str = Query(None)):
     if not shop:
@@ -56,6 +57,7 @@ async def guardar_configuracion(
         "mensaje": "✅ Configuración guardada correctamente"
     })
 
+# Panel para ver mensajes enviados
 @app.get("/panel", response_class=HTMLResponse)
 async def ver_panel(request: Request, shop: str = Query(None)):
     if not shop:
@@ -86,6 +88,7 @@ async def ver_panel(request: Request, shop: str = Query(None)):
         "mensajes": mensajes
     })
 
+# Activar o desactivar una tienda
 @app.get("/activar")
 async def activar_shop(shop: str = Query(...), estado: int = Query(...)):
     conn = sqlite3.connect(DB_PATH)
@@ -95,6 +98,7 @@ async def activar_shop(shop: str = Query(...), estado: int = Query(...)):
     conn.close()
     return RedirectResponse(url=f"/panel?shop={shop}", status_code=303)
 
+# Webhook para recibir pedidos desde Shopify
 @app.post("/webhook")
 async def recibir_pedido(pedido: dict):
     shop_domain = pedido.get("source_name")
@@ -110,7 +114,12 @@ async def recibir_pedido(pedido: dict):
         return {"error": "Tienda inactiva o no registrada"}
 
     telefono_raw = pedido.get("shipping_address", {}).get("phone", "")
-    telefono = ''.join(filter(str.isdigit, telefono_raw))  # Solo números
+    telefono = ''.join(filter(str.isdigit, telefono_raw))  # Quitar todo lo que no sean números
+
+    # Añadir prefijo internacional si es un móvil español (empieza por 6 o 7)
+    if telefono.startswith("6") or telefono.startswith("7"):
+        telefono = "34" + telefono
+
     nombre = pedido.get("shipping_address", {}).get("name")
     direccion = pedido.get("shipping_address", {}).get("address1")
     productos = "\n".join([f"• {item['title']} x{item['quantity']}" for item in pedido.get("line_items", [])])
@@ -131,7 +140,7 @@ Gracias por tu pedido #{pedido_id} en nuestra tienda ❤️
 
 Te avisaremos cuando tu pedido esté en camino. ¡Gracias por confiar en nosotros! 📬"""
 
-    # Enviar con Baileys en Replit
+    # Enviar a Replit (Baileys)
     url = "https://94eba1fc-8243-4ba5-aec6-4ac0c286ce4f-00-hmxo37a6xidr.spock.replit.dev/send"
     payload = {
         "to": telefono,
@@ -147,7 +156,7 @@ Te avisaremos cuando tu pedido esté en camino. ¡Gracias por confiar en nosotro
             print("❌ Error enviando WhatsApp:", e)
             estado_envio = "fallido"
 
-    # Guardar en historial
+    # Guardar mensaje en la base de datos
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
