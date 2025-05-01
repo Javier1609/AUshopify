@@ -8,7 +8,7 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 DB_PATH = "configuraciones.db"
 
-# Crear tablas
+# Crear tablas si no existen
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 cursor.execute('''
@@ -31,14 +31,14 @@ cursor.execute('''
 conn.commit()
 conn.close()
 
-@app.get("/", response_class=HTMLResponse)
-async def landing(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# ==========================================
+# ELIMINADA ruta "/" porque no hay index.html
+# ==========================================
 
 @app.get("/configurar", response_class=HTMLResponse)
 async def mostrar_formulario(request: Request, shop: str = Query(None)):
     if not shop:
-        return HTMLResponse("❌ Falta ?shop=mitienda.myshopify.com", status_code=400)
+        return HTMLResponse("❌ Falta el parámetro ?shop=mitienda.myshopify.com", status_code=400)
     return templates.TemplateResponse("configurar.html", {"request": request, "shop": shop})
 
 @app.post("/configurar", response_class=HTMLResponse)
@@ -134,7 +134,7 @@ Gracias por tu pedido #{pedido_id} en nuestra tienda ❤️
 
 Te avisaremos cuando tu pedido esté en camino. ¡Gracias por confiar en nosotros! 📬"""
 
-    # Enviar con Baileys (servidor local en puerto 3000)
+    # Enviar mensaje con Baileys en Replit
     url = "https://94eba1fc-8243-4ba5-aec6-4ac0c286ce4f-00-hmxo37a6xidr.spock.replit.dev/send"
     payload = {
         "to": telefono,
@@ -147,10 +147,10 @@ Te avisaremos cuando tu pedido esté en camino. ¡Gracias por confiar en nosotro
             response = await client.post(url, json=payload)
             estado_envio = "enviado" if response.status_code == 200 else "fallido"
         except Exception as e:
-            print("❌ Error enviando a Baileys:", e)
+            print("❌ Error enviando WhatsApp:", e)
             estado_envio = "fallido"
 
-    # Guardar en historial
+    # Guardar el historial del mensaje
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
